@@ -19,6 +19,8 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -115,6 +117,112 @@
     const ACTIVE_RECIPE_KEY = 'sourdough-timer-active-recipe';
     const RECORDS_KEY = 'sourdough-timer-records';
     const SELECTED_DATE_KEY = 'sourdough-timer-selected-date';
+
+    // Firebase 配置
+    const firebaseConfig = {
+      apiKey: "AIzaSyAcXlWa_cW5E-MavQRxC0yzhd4sJxt66WA",
+      authDomain: "sourdough-timer.firebaseapp.com",
+      projectId: "sourdough-timer",
+      storageBucket: "sourdough-timer.firebasestorage.app",
+      messagingSenderId: "536010769982",
+      appId: "1:536010769982:web:4590491af4619f81fe336f"
+    };
+
+    // 初始化 Firebase
+    let db = null;
+    let firebaseReady = false;
+    try {
+      if (firebase && firebase.apps.length === 0) {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        // 啟用離線持久化
+        db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+          console.log('Firebase 離線持久化不支持:', err.code);
+        });
+        firebaseReady = true;
+      }
+    } catch (e) {
+      console.log('Firebase 初始化失敗:', e);
+    }
+
+    // Firebase 同步輔助函數
+    const firebaseSync = {
+      isReady: () => firebaseReady && db !== null,
+
+      // 同步食譜到 Firestore
+      saveRecipes: async (recipes) => {
+        if (!firebaseReady || !db) return false;
+        try {
+          await db.collection('settings').doc('recipes').set({ data: recipes, updatedAt: Date.now() });
+          return true;
+        } catch (e) { console.error('Save recipes error:', e); return false; }
+      },
+
+      // 從 Firestore 載入食譜
+      loadRecipes: async () => {
+        if (!firebaseReady || !db) return null;
+        try {
+          const doc = await db.collection('settings').doc('recipes').get();
+          return doc.exists ? doc.data().data : null;
+        } catch (e) { console.error('Load recipes error:', e); return null; }
+      },
+
+      // 同步 active recipe ID
+      saveActiveRecipe: async (recipeId) => {
+        if (!firebaseReady || !db) return false;
+        try {
+          await db.collection('settings').doc('activeRecipe').set({ recipeId, updatedAt: Date.now() });
+          return true;
+        } catch (e) { console.error('Save active recipe error:', e); return false; }
+      },
+
+      // 載入 active recipe ID
+      loadActiveRecipe: async () => {
+        if (!firebaseReady || !db) return null;
+        try {
+          const doc = await db.collection('settings').doc('activeRecipe').get();
+          return doc.exists ? doc.data().recipeId : null;
+        } catch (e) { console.error('Load active recipe error:', e); return null; }
+      },
+
+      // 同步記錄到 Firestore
+      saveRecords: async (records) => {
+        if (!firebaseReady || !db) return false;
+        try {
+          await db.collection('settings').doc('records').set({ data: records, updatedAt: Date.now() });
+          return true;
+        } catch (e) { console.error('Save records error:', e); return false; }
+      },
+
+      // 從 Firestore 載入記錄
+      loadRecords: async () => {
+        if (!firebaseReady || !db) return null;
+        try {
+          const doc = await db.collection('settings').doc('records').get();
+          return doc.exists ? doc.data().data : null;
+        } catch (e) { console.error('Load records error:', e); return null; }
+      },
+
+      // 初始化同步（首次載入）
+      initSync: async () => {
+        if (!firebaseReady || !db) return { recipes: null, activeRecipe: null, records: null };
+        try {
+          const [recipesDoc, activeRecipeDoc, recordsDoc] = await Promise.all([
+            db.collection('settings').doc('recipes').get(),
+            db.collection('settings').doc('activeRecipe').get(),
+            db.collection('settings').doc('records').get()
+          ]);
+          return {
+            recipes: recipesDoc.exists ? recipesDoc.data().data : null,
+            activeRecipe: activeRecipeDoc.exists ? activeRecipeDoc.data().recipeId : null,
+            records: recordsDoc.exists ? recordsDoc.data().data : null
+          };
+        } catch (e) {
+          console.error('Init sync error:', e);
+          return { recipes: null, activeRecipe: null, records: null };
+        }
+      }
+    };
 
     // 使用本地日期字串 (YYYY-MM-DD)
     const formatDate = (date) => {
@@ -465,6 +573,84 @@
       const [sessionIngredients, setSessionIngredients] = useState([]);
       const [stepTimes, setStepTimes] = useState({});
       const [completedSteps, setCompletedSteps] = useState([]);
+      const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, synced, error
+      const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+      // Firebase 初始化同步 - 首次載入時從 Firebase 獲取數據
+      useEffect(() => {
+        if (!firebaseSync.isReady()) {
+          setIsInitialLoad(false);
+          return;
+        }
+
+        const loadFromFirebase = async () => {
+          setSyncStatus('syncing');
+          try {
+            const cloudData = await firebaseSync.initSync();
+
+            // 載入食譜
+            if (cloudData.recipes) {
+              setRecipes(cloudData.recipes);
+            }
+            // 載入 active recipe
+            if (cloudData.activeRecipe) {
+              setActiveRecipeId(cloudData.activeRecipe);
+            }
+            // 載入記錄
+            if (cloudData.records) {
+              // 合併預設、本地和雲端數據（雲端優先）
+              const localRecords = JSON.parse(localStorage.getItem(RECORDS_KEY) || '{}');
+              const mergedRecords = { ...DEFAULT_RECORDS, ...localRecords, ...cloudData.records };
+              setRecords(mergedRecords);
+            }
+
+            setSyncStatus('synced');
+          } catch (e) {
+            console.error('Initial sync error:', e);
+            setSyncStatus('error');
+          }
+          setIsInitialLoad(false);
+        };
+
+        loadFromFirebase();
+      }, []);
+
+      // 當數據變化時自動同步到 Firebase
+      useEffect(() => {
+        if (isInitialLoad || !firebaseSync.isReady()) return;
+        firebaseSync.saveRecipes(recipes);
+      }, [recipes, isInitialLoad]);
+
+      useEffect(() => {
+        if (isInitialLoad || !firebaseSync.isReady()) return;
+        firebaseSync.saveActiveRecipe(activeRecipeId);
+      }, [activeRecipeId, isInitialLoad]);
+
+      useEffect(() => {
+        if (isInitialLoad || !firebaseSync.isReady()) return;
+        firebaseSync.saveRecords(records);
+      }, [records, isInitialLoad]);
+
+      const handleManualSync = async () => {
+        if (!firebaseSync.isReady()) {
+          alert('Firebase 未初始化，請檢查網絡連接');
+          return;
+        }
+        setSyncStatus('syncing');
+        try {
+          const cloudData = await firebaseSync.initSync();
+          if (cloudData.recipes) setRecipes(cloudData.recipes);
+          if (cloudData.activeRecipe) setActiveRecipeId(cloudData.activeRecipe);
+          if (cloudData.records) {
+            const localRecords = JSON.parse(localStorage.getItem(RECORDS_KEY) || '{}');
+            const mergedRecords = { ...DEFAULT_RECORDS, ...localRecords, ...cloudData.records };
+            setRecords(mergedRecords);
+          }
+          setSyncStatus('synced');
+        } catch (e) {
+          setSyncStatus('error');
+        }
+      };
 
       const activeRecipe = recipes.find(r => r.id === activeRecipeId) || recipes[0];
       const steps = activeRecipe?.steps || [];
@@ -596,7 +782,11 @@
           <header className="bg-white shadow-sm sticky top-0 z-10">
             <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
               <h1 className="font-display text-2xl font-bold text-bread">🍞 Sourdough</h1>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                {/* Firebase 同步狀態 */}
+                <button onClick={handleManualSync} className={`p-2 rounded-lg btn-tap ${syncStatus === 'synced' ? 'text-success' : syncStatus === 'syncing' ? 'text-yeast animate-pulse' : syncStatus === 'error' ? 'text-danger' : 'text-wheat hover:text-bread'}`} title={firebaseSync.isReady() ? '同步到雲端' : 'Firebase 未連接'}>
+                  {syncStatus === 'syncing' ? '↻' : syncStatus === 'synced' ? '✓' : syncStatus === 'error' ? '!' : '☁'}
+                </button>
                 <button onClick={handleReset} className="p-3 text-wheat hover:text-bread" title="重置">🔄</button>
                 <button onClick={() => setIsEditMode(!isEditMode)} className={`px-4 py-2 rounded-xl font-semibold btn-tap ${isEditMode ? 'bg-yeast text-white' : 'bg-light-wheat text-bread'}`}>{isEditMode ? '完成' : '編輯'}</button>
               </div>
