@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sourdough-timer-v1';
+const CACHE_NAME = 'sourdough-timer-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -20,7 +20,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// 啟用
+// 啟用 - 清理舊快取
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -54,4 +54,11 @@ self.addEventListener('fetch', (event) => {
       });
     })
   );
+});
+
+// 更新時通知客戶端
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
