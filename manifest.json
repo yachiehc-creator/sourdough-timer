@@ -1,0 +1,35 @@
+{
+  "name": "麵包計時器",
+  "short_name": "🍞 Timer",
+  "description": "酸種麵包發酵計時器 - 記錄你的烘焙旅程",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FDF6E3",
+  "theme_color": "#E07B39",
+  "orientation": "portrait-primary",
+  "scope": "./",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect fill='%23FDF6E3' width='512' height='512' rx='64'/%3E%3Ctext x='50%25' y='55%25' text-anchor='middle' font-size='280' fill='%233D2914'%3E🍞%3C/text%3E%3Ctext x='50%25' y='75%25' text-anchor='middle' font-size='80' fill='%23E07B39' font-family='sans-serif'%3ETimer%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect fill='%23FDF6E3' width='192' height='192' rx='24'/%3E%3Ctext x='50%25' y='60%25' text-anchor='middle' font-size='100' fill='%233D2914'%3E🍞%3C/text%3E%3Ctext x='50%25' y='80%25' text-anchor='middle' font-size='30' fill='%23E07B39' font-family='sans-serif'%3ETimer%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect fill='%23FDF6E3' width='180' height='180' rx='18'/%3E%3Ctext x='50%25' y='58%25' text-anchor='middle' font-size='80' fill='%233D2914'%3E🍞%3C/text%3E%3C/svg%3E",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["food", "lifestyle", "utilities"],
+  "lang": "zh-TW",
+  "dir": "ltr",
+  "prefer_related_applications": false
+}
